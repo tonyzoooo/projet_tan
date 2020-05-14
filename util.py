@@ -86,7 +86,7 @@ def butterworth(f, fc):
     Returns:
         - res: float
     """
-    res = pl.sqrt(1+(f/fc)**4)
+    res = pl.sqrt(1+(f/fc)**2)
     return res
 
 def meansquare(values):

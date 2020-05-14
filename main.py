@@ -13,9 +13,9 @@ from util import *
 # =============================================================================
 T = 0.1 # duree du signal extrait initial
 S = 4 #suréchantillonnage
-fmax = 2500
-fmin = 300
-fc = 5000# fréquence de coupure
+fmax = 3500
+fmin = 50
+fc = 4000# fréquence de coupure
 
 # =============================================================================
 # Lecture 
@@ -54,7 +54,7 @@ def extract(time, signal, fe):
         - t: array[float]
         - res: array[int32]
     """
-    startindex = len(signal)//10
+    startindex = 2*len(signal)//10
     N = 2**nextpow2(T*fe)
     t = time[startindex:startindex+N].copy()-time[startindex]
     res = signal[startindex:startindex+N].copy()
@@ -200,7 +200,7 @@ def nearestNeighbour(H, Hms):
     for key, value in Hms.items():
        temp.update({key : distance(H, value)})
     res = {k: v for k, v in sorted(temp.items(), key=lambda item: item[1])}
-    return next(iter(res))
+    return str(res)
 
 # =============================================================================
 # Génération des exemples de comparaison
@@ -236,8 +236,8 @@ def examples():
 # =============================================================================
 # Démonstration
 # =============================================================================
-def demo():
-    N, fe, t, s = getData() #récupère les données
+def demo(filepath):
+    N, fe, t, s = getData(filepath) #récupère les données
     new_t, new_s = extract(t, s, fe) #récupère une portion stable de données
     win_s = windowedSig(new_s) #multiplication par hamming
     f, dft = spectrum(new_t, win_s, fe)#fft
@@ -278,4 +278,6 @@ if __name__ == '__main__':
     print("Calcul en cours...")
     rawValues = H(filename)
     print("Le phonème prononcé est : " + nearestNeighbour(rawValues, bank))
+    # demo("./resources/a.wav")
+    # demo("./resources/Audio/a1.wav")
     
