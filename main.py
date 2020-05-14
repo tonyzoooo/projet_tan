@@ -187,7 +187,7 @@ def distance(H, Hm):
     Returns:
         - res: float
     """
-    res = pl.sqrt(sum( (H[k]/meansquare(H) - Hm[k]/meansquare(Hm))**2))
+    res = pl.sqrt(sum( (H[k]/meansquare(H) - Hm[k]/meansquare(Hm))**2 for k in range(len(H))))
     return res
 
 
@@ -195,13 +195,43 @@ def distance(H, Hm):
 # =============================================================================
 # Classification
 # =============================================================================
-
+def nearestNeighbour(H, Hms):
+    temp = dict()
+    for key, value in Hms.items():
+       temp.update({key : distance(H, value)})
+    res = {k: v for k, v in sorted(temp.items(), key=lambda item: item[1])}
+    return next(iter(res))
 
 # =============================================================================
 # Génération des exemples de comparaison
 # =============================================================================
-
-
+def H(filepath):
+    N, fe, t, s = getData(filepath) #récupère les données
+    new_t, new_s = extract(t, s, fe) #récupère une portion stable de données
+    win_s = windowedSig(new_s) #multiplication par hamming
+    f, dft = spectrum(new_t, win_s, fe)#fft
+    new_N = len(dft)
+    N_p = new_N
+    delta_fp = fe/(N_p)
+    Kmax = int(fmax/delta_fp)
+    Kmin = int(fmin/delta_fp)
+    new_f, new_dft = usefulSpectrum(Kmin, Kmax, f, dft)#récup données utiles
+    last_dft = straighten(new_dft, fe) #accentuation
+    latest_dft = smoothing(last_dft, Kmin, Kmax) #lissage
+    rawValues = extractRaw(latest_dft, Kmin, Kmax) #récupère H non normalisé
+    return rawValues
+        
+    
+def examples():
+    res = dict()
+    for root, dirs, files in os.walk("./resources/Audio"):
+        for name in files :
+            if name.endswith(".wav"):
+                filename = os.path.join(root, name)
+                sound = name.split(".")[0]
+                res.update({sound : H(filename)})
+    return res
+    
 
 # =============================================================================
 # Démonstration
@@ -241,4 +271,8 @@ def demo():
 # Programme principal
 # =============================================================================
 if __name__ == '__main__':
-    demo()
+    bank = examples()
+    filename = input("Chemin du fichier phonème à analyser : ")
+    rawValues = H(filename)
+    print("Le phonème prononcé est : " + nearestNeighbour(rawValues, bank))
+    
