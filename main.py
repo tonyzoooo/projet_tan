@@ -271,8 +271,11 @@ def demo():
 # Programme principal
 # =============================================================================
 if __name__ == '__main__':
-    bank = examples()
+    
     filename = input("Chemin du fichier phonème à analyser : ")
+    print("Génération des phonèmes types...")
+    bank = examples()
+    print("Calcul en cours...")
     rawValues = H(filename)
     print("Le phonème prononcé est : " + nearestNeighbour(rawValues, bank))
     
