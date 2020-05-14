@@ -4,16 +4,19 @@
 # =============================================================================
 # Imports
 # =============================================================================
-import wave
-import pylab as pl
-import scipy as sc
 import os
+import wave
+from util import *
 
 # =============================================================================
 # Variables globales
 # =============================================================================
+T = 0.1 # duree du signal extrait initial
+S = 4 #suréchantillonnage
+fmax = 2500
+fmin = 300
+fc = 5000# fréquence de coupure
 
-S = 4
 # =============================================================================
 # Lecture 
 # =============================================================================
@@ -22,6 +25,8 @@ def getData(filename="./resources/voyelles_non_nasalisées/a1.wav"):
     Param:
         - filename: string
     Returns:
+        - frames: int
+        - rate: int
         - time: array[float]
         - signal: array[int32]
         - freq: array[float]
@@ -31,157 +36,159 @@ def getData(filename="./resources/voyelles_non_nasalisées/a1.wav"):
         frames = data.getnframes() #nombre d'échantillons
         rate = data.getframerate() #fréquence d'échantillonage
         duration = frames/rate #durée du signal
-        time = pl.linspace(0, duration, S)        
+        time = pl.linspace(0, duration, frames)        
         signal = data.readframes(-1) #lit les frames audio sous forme de bytes
         signal = pl.frombuffer(signal, "int32") #transforme les bytes en array
-        window = pl.hamming(frames)
-        res = signal*window
-        freq = pl.fftfreq(S*frames, 1/rate)
-        fourier = abs(sc.fft.fft(res, S*frames))
-    return frames, rate, time, res, freq, fourier
-
-
-def plotSignalT(time, signal):
-    """
-    Param:
-        - time: array[float]
-        - signal: array[int16]
-    Returns:
-        None
-    """
-    pl.figure("Temporel")
-    pl.grid()
-    pl.xlabel('Temps en secondes')
-    pl.ylabel('Amplitude du signal')
-    pl.title("Signal audio dans le domaine temporel")
-    pl.plot(time, signal)
-    pl.show()
-
-
-def plotSignalF(frequency, signal):
-    """
-    Param:
-        - time: array[float]
-        - signal: array[int16]
-    Returns:
-        None
-    """
-    pl.figure("Fréquentiel")
-    pl.grid()
-    pl.xlabel('Fréquence en Hertz')
-    pl.ylabel('Amplitude du signal')
-    pl.title("Signal audio dans le domaine fréquentiel")
-    pl.plot(frequency, signal)
-    pl.show()
-
+    return frames, rate, time, signal
 
 # =============================================================================
 # Extraction
 # =============================================================================
-def extract(frequency, signal):
+def extract(time, signal, fe):
     """
-    extrait signal de 200 à 4000 Hz
+    Param:
+        - time: array[float]
+        - signal: array[int32]
+        - fe: int
+    Returns:
+        - t: array[float]
+        - res: array[int32]
     """
-    res = []
-    f = []
-    for i in range(len(frequency)) :
-        if frequency[i] >= 0:
-            res.append(signal[i])
-            f.append(frequency[i])
-        elif frequency[i] > 2600:
-            break
-    return res, f
+    startindex = len(signal)//10
+    N = 2**nextpow2(T*fe)
+    t = time[startindex:startindex+N].copy()-time[startindex]
+    res = signal[startindex:startindex+N].copy()
+    return t, res
 
-def weightedSignal(signal):
-    Q = 2*30
-    l = len(signal)
-    print(l)
-    coef = 0
-    newSignal = [0]*l
-    temp = 0
-    for i in range(0,l):
-        for j in range(-Q//2,Q//2-1):
-            if (i-j)<0 or (i-j)>=l<0:
-                coef = 0
-            else:
-                coef = signal[i-j]
-            temp+=ponderation(Q,j)*coef
-        newSignal[i] = temp
-        temp=0
-    return newSignal
-    
-def ponderation(Q,k):
-    res=0
-    for i in range(-Q//2,Q//2-1):
-        res+=hamming(i,Q)
-    return hamming(k,Q)/res
-
-
-def findMaxFrequency(frequency, signal):
-    s,f = extract(frequency, signal)
-    maxAmp = max(s)
-    threshold = 0.5*maxAmp/100
-    fmax = 0
-    for i in range(0,len(f)):
-        if s[i] > threshold :
-            fmax = f[i]
-    return fmax
-
-def findMinFrequency(frequency, signal):
-    s,f = extract(frequency, signal)
-    maxAmp = max(s)
-    threshold = 0.5*maxAmp/100
-    fmin = 0
-    for i in range(len(s)-1, 0, -1):
-        if s[i] > threshold :
-            fmin = f[i]
-    
-    return fmin
-
-def getK(f, deltaF):
-    return round(f/deltaF)
-
-def extractRaw(signal,Kmin,Kmax):
-    res = []
-    for i in range(len(signal)) :
-        if(i > Kmin and i < Kmax) :
-            res.append(signal[i])
+# =============================================================================
+# Fenêtrage
+# =============================================================================
+def windowedSig(signal):
+    """
+    Param:
+        - signal: array[int32]
+    Returns:
+        - res: array[float]
+    """
+    res = signal.copy()
+    N = len(signal)
+    n = -N//2
+    for i in range(N):
+        res[i] *= hamming(n, N)
+        n += 1
     return res
 
+# =============================================================================
+# Spectre
+# =============================================================================
+def spectrum(time, signal, fe):
+    """
+    Param:
+        - time: array[float]
+        - signal: array[int32]
+        - fe: int
+    Returns:
+        - f: array[float]
+        - res: array[int32]
+    """
+    N = len(signal)
+    temp = pl.zeros(N*S)
+    temp[:N] = signal
+    f = pl.fftfreq(N*S, 1/fe)
+    res = abs(pl.fft(temp))
+    return f, res
+
+
+def usefulSpectrum(Kmin, Kmax, frequency, signal):
+    """
+    Param:
+        - Kmin: int
+        - Kmax: int
+        - frequency: array[float]
+        - signal: array[float]
+    Returns:
+        - f: array[float]
+        - res: array[float]
+    """
+    f = frequency[0:Kmax].copy()
+    res = signal[0:Kmax].copy()
+    res[:Kmin] =0
+    return f, res
+
+# =============================================================================
+# Accentuation
+# =============================================================================
+def straighten(signal, fe):
+    """
+    Param:
+        - signal: array[float]
+    Returns:
+        - res: array[float]
+    """
+    N = len(signal)
+    res = pl.zeros(N)
+    for k in range(N):
+        kc = N*fc/fe
+        res[k] = butterworth(k, kc)*signal[k]
+    return res
+
+
+# =============================================================================
+# Lissage
+# =============================================================================
+def smoothing(signal, Kmin, Kmax):
+    """
+    Param:
+        - signal: array[float]
+        - Kmin: int
+        - Kmax: int
+    Returns:
+        - res: array[float]
+    """
+    Q = 300
+    N = len(signal)
+    Sw = sum(hamming(q, Q) for q in range(-Q//2, Q//2))
+    res = pl.zeros(N)
+    for k in range(N):
+        temp = 0
+        for q in range(-Q//2, Q//2):
+            if Kmax > k-q >= Kmin: 
+                temp += hamming(q, Q)*signal[k-q]/Sw
+        res[k] = temp        
+    return res
+
+# =============================================================================
+# Récupération des données utiles
+# =============================================================================
+def extractRaw(signal, Kmin, Kmax):
+    """
+    Param:
+        - signal: array[float]
+        - Kmin: int
+        - Kmax: int
+    Returns: 
+        - res: array[float]
+    """
+    res = pl.zeros(Kmax-Kmin)
+    k = Kmin
+    while k != Kmax:
+        res[k-Kmin] = signal[k]
+        k+=1
+    return res
 
 # =============================================================================
 # Normalisation
 # =============================================================================
-
-def normalValues(H):
-    res = []
-    meansquare = 0
-    for element in H:
-        meansquare += element
-    meansquare = pl.sqrt(meansquare)
-    for element in H :
-        res.append(element/meansquare)
+def distance(H, Hm):
+    """
+    Param:
+        - H: array[float]
+        - Hm: array[float]
+    Returns:
+        - res: float
+    """
+    res = pl.sqrt(sum( (H[k]/meansquare(H) - Hm[k]/meansquare(Hm))**2))
     return res
-
-def hamming(q,Q):
-    return (1+pl.cos(2*pl.pi*q/Q)/2)
-    
-def normalDistance(H, Hm, Kmin, Kmax):
-    sum = 0
-    for k in range(int(Kmin), int(Kmax)):
-        sum+= (H[k]-Hm[k])**2
-    res = pl.sqrt(sum)
-    return  res
-
-
-
-# =============================================================================
-# Estimation de la réponse fréquentielle
-# =============================================================================
-
-# =============================================================================
-# Comparaison
-# =============================================================================
 
 
 
@@ -190,51 +197,48 @@ def normalDistance(H, Hm, Kmin, Kmax):
 # =============================================================================
 
 
+# =============================================================================
+# Génération des exemples de comparaison
+# =============================================================================
 
-def H(name):
-    N, fe, t, s, f, tf = getData(name)
-    N_prime = S*N   
-    fmax = findMaxFrequency(f, tf)
-    fmin = findMinFrequency(f, tf)
-    plotSignalF(f, tf)
-    deltaF = fe/N_prime
-    Kmax = getK(fmax, deltaF)
-    Kmin = getK(fmin, deltaF)
-    rawValues = extractRaw(s,Kmin,Kmax)
-    normalRawValues = normalValues(rawValues)
-    return normalRawValues
+
+
+# =============================================================================
+# Démonstration
+# =============================================================================
+def demo():
+    N, fe, t, s = getData() #récupère les données
+    new_t, new_s = extract(t, s, fe) #récupère une portion stable de données
+    win_s = windowedSig(new_s) #multiplication par hamming
+    f, dft = spectrum(new_t, win_s, fe)#fft
+    new_N = len(dft)
+    N_p = new_N
+    delta_fp = fe/(N_p)
+    Kmax = int(fmax/delta_fp)
+    Kmin = int(fmin/delta_fp)
+    new_f, new_dft = usefulSpectrum(Kmin, Kmax, f, dft)#récup données utiles
+    last_dft = straighten(new_dft, fe) #accentuation
+    latest_dft = smoothing(last_dft, Kmin, Kmax) #lissage
+    rawValues = extractRaw(latest_dft, Kmin, Kmax) #récupère H non normalisé
+    #### affichage
+    pl.figure()
+    plotSignalT(t, s, "Signal original")
+    pl.figure()
+    plotSignalT(new_t, new_s, "Signal extrait")
+    pl.figure()
+    plotSignalT(new_t, win_s, "Signal fenêtré")
+    pl.figure()
+    plotSignalF(f, dft, "Spectre du sig fenêtré")
+    pl.figure()
+    plotSignalF(new_f, new_dft, "Spectre extrait")
+    pl.figure()
+    plotSignalF(new_f, last_dft, "Spectre accentué")
+    pl.figure()
+    plotSignalF(new_f, latest_dft, "Spectre lissé")
+
+
 # =============================================================================
 # Programme principal
 # =============================================================================
 if __name__ == '__main__':
-    N, fe, t, s, f, tf = getData()
-    tf_eq = weightedSignal(tf)
-    plotSignalF(f,tf_eq)
-"""
-    audios = dict()
-    for root, dirs, files in os.walk("./resources/Audio"):
-        for name in files:
-            print(name)
-            audios[name] = H("./resources/Audio/"+name)
-
-    N, fe, t, s, f, tf = getData()
-    N_prime = S*N
-    print(fe)
-    #plotSignalT(t, s)
-    plotSignalF(f, tf)
-    
-    fmax = findMaxFrequency(f, tf)
-    fmin = findMinFrequency(f, tf)
-    deltaF = fe/N_prime
-    Kmax = getK(fmax, deltaF)
-    Kmin = getK(fmin, deltaF)
-    print("fmin :"+str(fmin))
-    print("fmax :"+str(fmax))
-    print("Kmin :"+str(Kmin))
-    print("Kmax :"+str(Kmax))
-
-    rawValues = extractRaw(s,Kmin,Kmax)
-    normalRawValues = normalValues(rawValues)
-    
-
-"""
+    demo()
