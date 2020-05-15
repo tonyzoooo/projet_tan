@@ -14,8 +14,8 @@ import json
 # =============================================================================
 T = 0.1 # duree du signal extrait initial
 S = 4 #suréchantillonnage
-fmax = 3500
-fmin = 50
+fmax = 3000
+fmin = 100
 fc = 4000# fréquence de coupure
 
 # =============================================================================
@@ -283,12 +283,13 @@ if __name__ == '__main__':
     
     with open('./resources/dicoAudio.txt') as json_file:
         bank = json.load(json_file)
-
-    
+    demo("./resources/Audio/a1.wav")
+    #demo("./resources/didia.wav")
 
     filename = input("Chemin du fichier phonème à analyser : ")
     print("Calcul en cours...")
     rawValues = H(filename)
     print("Le phonème prononcé est : " + nearestNeighbour(rawValues, bank))
-    # demo("./resources/a.wav")
+
+    
     # demo("./resources/Audio/a1.wav")
