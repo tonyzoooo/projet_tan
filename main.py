@@ -7,6 +7,7 @@
 import os
 import wave
 from util import *
+import json
 
 # =============================================================================
 # Variables globales
@@ -229,7 +230,7 @@ def examples():
             if name.endswith(".wav"):
                 filename = os.path.join(root, name)
                 sound = name.split(".")[0]
-                res.update({sound : H(filename)})
+                res.update({sound : H(filename).tolist()})
     return res
     
 
@@ -272,12 +273,22 @@ def demo(filepath):
 # =============================================================================
 if __name__ == '__main__':
     
+    bank = dict()
+ 
+    if (not os.path.isfile("./resources/dicoAudio.txt")):
+        print("Génération des phonèmes types...")  
+        bank = examples()
+        with open('./resources/dicoAudio.txt', 'w') as outfile:
+            json.dump(bank, outfile)
+    
+    with open('./resources/dicoAudio.txt') as json_file:
+        bank = json.load(json_file)
+
+    
+
     filename = input("Chemin du fichier phonème à analyser : ")
-    print("Génération des phonèmes types...")
-    bank = examples()
     print("Calcul en cours...")
     rawValues = H(filename)
     print("Le phonème prononcé est : " + nearestNeighbour(rawValues, bank))
     # demo("./resources/a.wav")
     # demo("./resources/Audio/a1.wav")
-    
